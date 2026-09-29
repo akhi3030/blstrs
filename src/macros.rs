@@ -161,7 +161,7 @@ macro_rules! encoded_point_delegations {
         impl Eq for $t {}
         impl PartialOrd for $t {
             fn partial_cmp(&self, other: &$t) -> Option<::core::cmp::Ordering> {
-                Some(self.cmp(other))
+                PartialOrd::partial_cmp(&self.0[..], &other.0[..])
             }
         }
         impl Ord for $t {

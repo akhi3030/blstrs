@@ -1,8 +1,5 @@
 use crate::{fp12::Fp12, G1Affine, G2Affine, Gt};
-use core::{
-    mem::MaybeUninit,
-    ops::{Add, AddAssign},
-};
+use core::ops::{Add, AddAssign};
 use ff::Field;
 use subtle::{Choice, ConditionallySelectable};
 
@@ -24,13 +21,14 @@ macro_rules! impl_pairing {
         /// Aggregate pairings efficiently.
         #[derive(Debug)]
         pub struct $name {
-            v: Box<[MaybeUninit<u64>]>,
+            v: Box<[u64]>,
         }
 
         impl $name {
             pub fn new(hash_or_encode: bool, dst: &[u8]) -> Self {
+                let v: Vec<u64> = vec![0; unsafe { blst_pairing_sizeof() } / 8];
                 let mut obj = Self {
-                    v: Box::<[u64]>::new_uninit_slice(unsafe { blst_pairing_sizeof() } / 8),
+                    v: v.into_boxed_slice(),
                 };
                 obj.init(hash_or_encode, dst);
                 obj
@@ -41,11 +39,11 @@ macro_rules! impl_pairing {
             }
 
             fn ctx(&mut self) -> *mut blst_pairing {
-                self.v.as_mut_ptr().cast()
+                self.v.as_mut_ptr() as *mut blst_pairing
             }
 
             fn const_ctx(&self) -> *const blst_pairing {
-                self.v.as_ptr().cast()
+                self.v.as_ptr() as *const blst_pairing
             }
 
             pub fn aggregate(
@@ -133,8 +131,8 @@ pub fn unique_messages(msgs: &[&[u8]]) -> bool {
         return msgs[0] != msgs[1];
     }
 
-    let mut v = Box::<[u64]>::new_uninit_slice(unsafe { blst_uniq_sizeof(n_elems) } / 8);
-    let ctx = v.as_mut_ptr().cast();
+    let mut v: Vec<u64> = vec![0; unsafe { blst_uniq_sizeof(n_elems) } / 8];
+    let ctx = v.as_mut_ptr() as *mut blst_uniq;
 
     unsafe { blst_uniq_init(ctx) };
 
@@ -176,7 +174,7 @@ impl pairing_lib::MillerLoopResult for MillerLoopResult {
     }
 }
 
-impl<'b> Add<&'b MillerLoopResult> for &MillerLoopResult {
+impl<'a, 'b> Add<&'b MillerLoopResult> for &'a MillerLoopResult {
     type Output = MillerLoopResult;
 
     #[inline]

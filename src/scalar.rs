@@ -15,7 +15,6 @@ use byte_slice_cast::AsByteSlice;
 use ff::{Field, FieldBits, PrimeField, PrimeFieldBits};
 use rand_core::RngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
-use zeroize::Zeroize;
 
 /// Represents an element of the scalar field $\mathbb{F}_q$ of the BLS12-381 elliptic
 /// curve construction.
@@ -388,7 +387,7 @@ impl Field for Scalar {
         // (t - 1) // 2 = 6104339283789297388802252303364915521546564123189034618274734669823
         ff::helpers::sqrt_tonelli_shanks(
             self,
-            [
+            &[
                 0x7fff_2dff_7fff_ffff,
                 0x04d0_ec02_a9de_d201,
                 0x94ce_bea4_199c_ec04,
@@ -569,25 +568,6 @@ impl Scalar {
         Self::from_bytes_le(&le_bytes)
     }
 
-    /// Interprets `bytes` as a big-endian integer of any length and reduces it modulo the
-    /// group order.
-    pub fn from_be_bytes_mod_order(bytes: &[u8]) -> Self {
-        // Memory safety: on length 0, `blst_scalar_from_be_bytes` reads 32 bytes past `bytes`
-        // and underflows its digit count.
-        if bytes.is_empty() {
-            return Self::ZERO;
-        }
-
-        let mut raw = blst_scalar::default();
-        // This step does the modular reduction
-        unsafe { blst_scalar_from_be_bytes(&mut raw, bytes.as_ptr(), bytes.len()) };
-
-        let mut out = blst_fr::default();
-        unsafe { blst_fr_from_scalar(&mut out, &raw) };
-
-        Scalar(out)
-    }
-
     /// Converts an element of `Scalar` into a byte representation in
     /// little-endian byte order.
     #[inline]
@@ -691,12 +671,6 @@ impl Scalar {
     #[inline]
     pub fn square_assign(&mut self) {
         unsafe { blst_fr_sqr(&mut self.0, &self.0) };
-    }
-}
-
-impl Zeroize for Scalar {
-    fn zeroize(&mut self) {
-        self.0.l.zeroize();
     }
 }
 
@@ -1913,31 +1887,5 @@ mod tests {
             }
         }
         assert_eq!(0, yep_bad.len());
-    }
-
-    /// Vectors from `bls12_381`'s `map_scalar`. These pin the endianness; blst covers the
-    /// reduction itself.
-    #[test]
-    fn test_from_be_bytes_mod_order() {
-        let vectors: &[(&[u8], &str)] = &[
-            (
-                b"aaaaaabbbbbbccccccddddddeeeeeeffffffgggggghhhhhh",
-                "Scalar(0x2228450bf55d8fe62395161bd3677ff6fc28e45b89bc87e02a818eda11a8c5da)",
-            ),
-            (
-                b"111111222222333333444444555555666666777777888888",
-                "Scalar(0x4aa543cbd2f0c8f37f8a375ce2e383eb343e7e3405f61e438b0a15fb8899d1ae)",
-            ),
-        ];
-
-        for (okm, expected) in vectors {
-            assert_eq!(
-                &format!("{:?}", Scalar::from_be_bytes_mod_order(okm)),
-                expected
-            );
-        }
-
-        // The empty-input guard is ours: blst would read out of bounds here.
-        assert_eq!(Scalar::from_be_bytes_mod_order(&[]), Scalar::ZERO);
     }
 }
